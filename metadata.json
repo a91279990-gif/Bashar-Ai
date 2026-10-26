@@ -1,0 +1,7 @@
+{
+  "name": "Bashar AI - বাশার এআই",
+  "description": "বিশ্বমানের সর্বজ্ঞানী এআই প্ল্যাটফর্ম - পৃথিবীর যেকোনো প্রশ্নের তাৎক্ষণিক নির্ভুল সমাধান, রিয়েল-টাইম ডাটা সিঙ্ক, প্রোফাইল ব্যবস্থাপনা এবং ভয়েস কমান্ড সহ।",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
