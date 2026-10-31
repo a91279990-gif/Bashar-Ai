@@ -7,6 +7,7 @@ import { ChatInput } from './components/ChatInput.tsx';
 import { AuthModal } from './components/AuthModal.tsx';
 import { ProfileModal } from './components/ProfileModal.tsx';
 import { NotesModal } from './components/NotesModal.tsx';
+import { ShortcutsModal } from './components/ShortcutsModal.tsx';
 import {
   Menu,
   Sparkles,
@@ -15,7 +16,11 @@ import {
   ShieldCheck,
   BookOpen,
   Trash2,
-  CheckCircle2
+  CheckCircle2,
+  Keyboard,
+  Download,
+  FileText,
+  ChevronDown
 } from 'lucide-react';
 
 function BasharAiApp() {
@@ -33,11 +38,14 @@ function BasharAiApp() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [pendingNote, setPendingNote] = useState<{ title: string; content: string } | null>(null);
 
   // Chat states
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const activeChat = chats.find((c) => c.id === activeChatId);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -177,6 +185,190 @@ function BasharAiApp() {
     }
   };
 
+  // Export / Download conversation as formatted Markdown or Text
+  const handleDownloadChat = (format: 'md' | 'txt' = 'md') => {
+    if (messages.length === 0) {
+      showNotification('ডাউনলোড করার মতো কোনো কথোপকথন বা বার্তা নেই।');
+      return;
+    }
+
+    const currentTitle = activeChat ? activeChat.title : 'বাশার এআই কথোপকথন';
+    const cleanFileName = currentTitle.replace(/[/\\?%*:|"<>]/g, '_').slice(0, 40).trim() || 'bashar-ai-chat';
+    const now = new Date();
+    const formattedDate = now.toLocaleDateString('bn-BD', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    const formattedTime = now.toLocaleTimeString('bn-BD');
+
+    let fileContent = '';
+
+    if (format === 'md') {
+      fileContent = `# ${currentTitle}\n\n`;
+      fileContent += `> **প্ল্যাটফর্ম:** বাশার এআই (Bashar AI)\n`;
+      fileContent += `> **তারিখ:** ${formattedDate}, ${formattedTime}\n`;
+      fileContent += `> **মোট বার্তা:** ${messages.length}\n`;
+      fileContent += `> **ব্যবহারকারী:** ${user ? user.name : 'অতিথি ব্যবহারকারী'}\n\n`;
+      fileContent += `---\n\n`;
+
+      messages.forEach((msg) => {
+        const sender = msg.role === 'user' ? `👤 **${user ? user.name : 'ব্যবহারকারী'}**` : `🤖 **বাশার এআই (Bashar AI)**`;
+        const time = new Date(msg.timestamp).toLocaleTimeString('bn-BD');
+        fileContent += `### ${sender}  *(${time})*\n\n`;
+        fileContent += `${msg.content}\n\n`;
+        fileContent += `---\n\n`;
+      });
+
+      fileContent += `\n*বাশার এআই (নির্মাতা: বাশার কোরাইশী) থেকে এক্সপোর্ট করা হয়েছে।*`;
+    } else {
+      fileContent = `====================================================\n`;
+      fileContent += `           বাশার এআই (Bashar AI) - চ্যাট হিস্ট্রি\n`;
+      fileContent += `====================================================\n`;
+      fileContent += `শিরোনাম: ${currentTitle}\n`;
+      fileContent += `তারিখ: ${formattedDate}, ${formattedTime}\n`;
+      fileContent += `মোট বার্তা: ${messages.length}\n`;
+      fileContent += `ব্যবহারকারী: ${user ? user.name : 'অতিথি'}\n`;
+      fileContent += `----------------------------------------------------\n\n`;
+
+      messages.forEach((msg) => {
+        const sender = msg.role === 'user' ? (user ? user.name : 'User') : 'Bashar AI';
+        const time = new Date(msg.timestamp).toLocaleTimeString('bn-BD');
+        fileContent += `[${time}] ${sender}:\n`;
+        fileContent += `${msg.content}\n\n`;
+        fileContent += `----------------------------------------------------\n\n`;
+      });
+
+      fileContent += `\nBashar AI (Developed by Bashar Quraishi)\n`;
+    }
+
+    const mime = format === 'md' ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8';
+    const blob = new Blob([fileContent], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${cleanFileName}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showNotification(`কথোপকথনটি ${format.toUpperCase()} ফরম্যাটে সফলভাবে ডাউনলোড হয়েছে!`);
+  };
+
+  // Global Keyboard Shortcuts (Ctrl+K, Ctrl+L, Ctrl+S, Ctrl+B, Ctrl+Shift+N, Ctrl+Shift+D, Ctrl+/, Esc)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = typeof window !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const isModifier = isMac ? e.metaKey : e.ctrlKey;
+
+      // Escape: Close any open modal / menu / drawer
+      if (e.key === 'Escape') {
+        if (isExportMenuOpen) {
+          setIsExportMenuOpen(false);
+          return;
+        }
+        if (isShortcutsModalOpen) {
+          setIsShortcutsModalOpen(false);
+          return;
+        }
+        if (isNotesModalOpen) {
+          setIsNotesModalOpen(false);
+          return;
+        }
+        if (isProfileModalOpen) {
+          setIsProfileModalOpen(false);
+          return;
+        }
+        if (isAuthModalOpen) {
+          setIsAuthModalOpen(false);
+          return;
+        }
+        if (isSidebarOpen) {
+          setIsSidebarOpen(false);
+          return;
+        }
+      }
+
+      // Modifier key shortcuts (Ctrl or Cmd)
+      if (isModifier) {
+        // Ctrl+S / Cmd+S: Download / Export current chat
+        if (e.key.toLowerCase() === 's' && !e.shiftKey) {
+          e.preventDefault();
+          handleDownloadChat('md');
+          return;
+        }
+
+        // Ctrl+K / Cmd+K: New Chat + Focus Input
+        if (e.key.toLowerCase() === 'k' && !e.shiftKey) {
+          e.preventDefault();
+          handleNewChat();
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('focus-chat-input'));
+            const el = document.getElementById('bashar-chat-input') as HTMLTextAreaElement | null;
+            if (el) el.focus();
+          }, 60);
+          showNotification('নতুন চ্যাট শুরু হয়েছে (Ctrl+K)');
+          return;
+        }
+
+        // Ctrl+L / Cmd+L: Focus Chat Input
+        if (e.key.toLowerCase() === 'l' && !e.shiftKey) {
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent('focus-chat-input'));
+          const el = document.getElementById('bashar-chat-input') as HTMLTextAreaElement | null;
+          if (el) {
+            el.focus();
+            el.select();
+          }
+          return;
+        }
+
+        // Ctrl+B / Cmd+B: Toggle Sidebar
+        if (e.key.toLowerCase() === 'b' && !e.shiftKey) {
+          e.preventDefault();
+          setIsSidebarOpen((prev) => !prev);
+          return;
+        }
+
+        // Ctrl+Shift+N / Cmd+Shift+N: Toggle Notebook
+        if (e.key.toLowerCase() === 'n' && e.shiftKey) {
+          e.preventDefault();
+          setIsNotesModalOpen((prev) => !prev);
+          return;
+        }
+
+        // Ctrl+Shift+D / Cmd+Shift+D: Toggle Theme
+        if (e.key.toLowerCase() === 'd' && e.shiftKey) {
+          e.preventDefault();
+          toggleTheme();
+          return;
+        }
+
+        // Ctrl+/ or Cmd+/: Show Shortcuts Modal
+        if (e.key === '/' || e.key === '?') {
+          e.preventDefault();
+          setIsShortcutsModalOpen((prev) => !prev);
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isShortcutsModalOpen,
+    isExportMenuOpen,
+    isNotesModalOpen,
+    isProfileModalOpen,
+    isAuthModalOpen,
+    isSidebarOpen,
+    handleNewChat,
+    toggleTheme,
+    messages,
+    activeChat,
+  ]);
+
   // Delete a chat with immediate state update and clean fallback
   const handleDeleteChat = async (chatId: string) => {
     // 1. Guest mode delete
@@ -258,6 +450,39 @@ function BasharAiApp() {
       }
     } catch (err) {
       console.error('Failed to rename chat:', err);
+    }
+  };
+
+  // Toggle chat pin status (pin to top / unpin)
+  const handleTogglePinChat = async (chatId: string) => {
+    const chat = chats.find((c) => c.id === chatId);
+    if (!chat) return;
+    const newPinnedState = !chat.isPinned;
+
+    const updated = chats.map((c) => (c.id === chatId ? { ...c, isPinned: newPinnedState } : c));
+    setChats(updated);
+
+    if (!token) {
+      localStorage.setItem('bashar_ai_guest_chats', JSON.stringify(updated));
+      showNotification(newPinnedState ? 'চ্যাটটি শীর্ষে পিন করা হয়েছে!' : 'চ্যাটটি আনপিন করা হয়েছে।');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/chats/${chatId}/pin`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ isPinned: newPinnedState }),
+      });
+      if (res.ok) {
+        showNotification(newPinnedState ? 'চ্যাটটি শীর্ষে পিন করা হয়েছে!' : 'চ্যাটটি আনপিন করা হয়েছে।');
+        await syncNow();
+      }
+    } catch (err) {
+      console.error('Failed to toggle pin:', err);
     }
   };
 
@@ -394,7 +619,34 @@ function BasharAiApp() {
     setIsNotesModalOpen(true);
   };
 
-  const activeChat = chats.find((c) => c.id === activeChatId);
+  // Handle message thumbs up / thumbs down rating & feedback
+  const handleRateMessage = async (messageId: string, rating: 'like' | 'dislike' | null, feedback?: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId ? { ...m, rating, feedbackComment: feedback } : m
+      )
+    );
+
+    if (!token && activeChatId) {
+      const updated = messages.map((m) =>
+        m.id === messageId ? { ...m, rating, feedbackComment: feedback } : m
+      );
+      localStorage.setItem(`bashar_ai_msgs_${activeChatId}`, JSON.stringify(updated));
+    }
+
+    try {
+      await fetch(`/api/messages/${messageId}/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({ rating, feedback }),
+      });
+    } catch (err) {
+      console.warn('Failed to submit message feedback to server:', err);
+    }
+  };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans">
@@ -406,7 +658,9 @@ function BasharAiApp() {
         onNewChat={handleNewChat}
         onDeleteChat={handleDeleteChat}
         onRenameChat={handleRenameChat}
+        onTogglePinChat={handleTogglePinChat}
         onOpenNotes={() => setIsNotesModalOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
         isDark={isDark}
         onToggleTheme={toggleTheme}
         onOpenProfile={() => setIsProfileModalOpen(true)}
@@ -452,10 +706,78 @@ function BasharAiApp() {
             <button
               onClick={() => setIsNotesModalOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-semibold transition-all cursor-pointer shadow-sm"
-              title="আপনার নোটবুক খুলুন"
+              title="আপনার নোটবুক খুলুন (Ctrl+Shift+N)"
             >
               <BookOpen className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden sm:inline">নোটবুক</span>
+            </button>
+
+            {/* Download Chat Export Button */}
+            {messages.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setIsExportMenuOpen((prev) => !prev)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-semibold transition-all cursor-pointer shadow-sm"
+                  title="কথোপকথন ডাউনলোড / এক্সপোর্ট করুন (Ctrl+S)"
+                >
+                  <Download className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">ডাউনলোড</span>
+                  <ChevronDown className="w-3 h-3 text-cyan-400 opacity-70" />
+                </button>
+
+                {isExportMenuOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-20"
+                      onClick={() => setIsExportMenuOpen(false)}
+                    />
+                    <div className="absolute right-0 mt-1.5 w-52 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl py-1 z-30 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 border-b border-slate-800">
+                        ফরম্যাট নির্বাচন করুন
+                      </div>
+                      <button
+                        onClick={() => {
+                          handleDownloadChat('md');
+                          setIsExportMenuOpen(false);
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-indigo-600/30 hover:text-white flex items-center gap-2.5 cursor-pointer transition-colors"
+                      >
+                        <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+                        <div>
+                          <p className="font-semibold text-slate-200">Markdown (.md)</p>
+                          <p className="text-[10px] text-slate-400">ফরম্যাটেড হেডিংসহ (Ctrl+S)</p>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleDownloadChat('txt');
+                          setIsExportMenuOpen(false);
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-cyan-600/30 hover:text-white flex items-center gap-2.5 cursor-pointer transition-colors"
+                      >
+                        <Download className="w-4 h-4 text-cyan-400 shrink-0" />
+                        <div>
+                          <p className="font-semibold text-slate-200">Text (.txt)</p>
+                          <p className="text-[10px] text-slate-400">সাধারণ প্লেইন টেক্সট ফাইল</p>
+                        </div>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Shortcuts Guide Button in Header */}
+            <button
+              onClick={() => setIsShortcutsModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-slate-300 hover:text-white text-xs font-medium transition-all cursor-pointer shadow-sm"
+              title="কীবোর্ড শর্টকাট সহায়িকা (Ctrl + /)"
+            >
+              <Keyboard className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden md:inline">শর্টকাট</span>
+              <kbd className="hidden lg:inline text-[10px] px-1 py-0.2 rounded bg-slate-900 text-slate-400 border border-slate-700/60 font-mono">
+                Ctrl+/
+              </kbd>
             </button>
 
             {/* Real-time status badge */}
@@ -536,6 +858,7 @@ function BasharAiApp() {
           onSendPrompt={handleSendMessage}
           onRegenerate={handleRegenerate}
           onSaveToNotes={handleSaveToNotes}
+          onRateMessage={handleRateMessage}
         />
 
         {/* Bottom Chat Input Dock */}
@@ -569,6 +892,12 @@ function BasharAiApp() {
         }}
         initialNote={pendingNote}
         onClearInitialNote={() => setPendingNote(null)}
+      />
+
+      {/* Keyboard Shortcuts Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
       />
     </div>
   );

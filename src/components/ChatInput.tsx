@@ -68,6 +68,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     };
   }, []);
 
+  // Listen to global focus request (e.g. from Ctrl+L or Ctrl+K)
+  useEffect(() => {
+    const handleFocusInput = () => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    };
+
+    window.addEventListener('focus-chat-input', handleFocusInput);
+    return () => window.removeEventListener('focus-chat-input', handleFocusInput);
+  }, []);
+
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
       try {
@@ -296,6 +309,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       {/* Main Floating Input Bar */}
       <div className="relative rounded-2xl bg-slate-900/90 border border-slate-700/80 hover:border-indigo-500/50 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/25 shadow-2xl backdrop-blur-xl transition-all">
         <textarea
+          id="bashar-chat-input"
           ref={textareaRef}
           value={input + (interimTranscript ? ` ${interimTranscript}` : '')}
           onChange={(e) => {
@@ -305,7 +319,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           }}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder="বাশার এআই-কে পৃথিবীর যেকোনো বিষয়ে প্রশ্ন করুন বা মুখে বলুন... (Shift + Enter নতুন লাইনের জন্য)"
+          placeholder="বাশার এআই-কে যেকোনো প্রশ্ন করুন... (Ctrl+L দিয়ে ফোকাস, Enter দিয়ে পাঠান)"
           rows={1}
           className="w-full pt-3.5 pb-12 pl-4 pr-24 sm:pr-28 text-slate-100 placeholder-slate-400 bg-transparent resize-none text-[15px] outline-none leading-relaxed max-h-44 disabled:opacity-50"
         />

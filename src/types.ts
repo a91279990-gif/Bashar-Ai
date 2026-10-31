@@ -18,6 +18,7 @@ export interface Chat {
   title: string;
   createdAt: string;
   updatedAt: string;
+  isPinned?: boolean;
 }
 
 export interface Message {
@@ -28,6 +29,8 @@ export interface Message {
   content: string;
   timestamp: string;
   citations?: string[];
+  rating?: 'like' | 'dislike' | null;
+  feedbackComment?: string;
 }
 
 export interface Note {

@@ -17,7 +17,13 @@ import {
   Code2,
   Lightbulb,
   BookOpen,
-  ArrowRight
+  ArrowRight,
+  ThumbsUp,
+  ThumbsDown,
+  Send,
+  MessageSquare,
+  CheckCircle2,
+  X
 } from 'lucide-react';
 
 interface ChatAreaProps {
@@ -26,6 +32,7 @@ interface ChatAreaProps {
   onSendPrompt: (promptText: string) => void;
   onRegenerate: () => void;
   onSaveToNotes?: (note: { title: string; content: string }) => void;
+  onRateMessage?: (messageId: string, rating: 'like' | 'dislike' | null, feedback?: string) => void;
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
@@ -34,10 +41,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onSendPrompt,
   onRegenerate,
   onSaveToNotes,
+  onRateMessage,
 }) => {
   const { user } = useAuth();
   const { speakingMessageId, speakText, stopSpeaking } = useVoice();
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [feedbackOpenId, setFeedbackOpenId] = useState<string | null>(null);
+  const [feedbackComment, setFeedbackComment] = useState<string>('');
+  const [feedbackSuccessId, setFeedbackSuccessId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new messages
@@ -49,6 +60,36 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     navigator.clipboard.writeText(content);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleRatingClick = (message: Message, type: 'like' | 'dislike') => {
+    const currentRating = message.rating;
+    const nextRating = currentRating === type ? null : type;
+
+    if (onRateMessage) {
+      onRateMessage(message.id, nextRating);
+    }
+
+    if (nextRating === 'like') {
+      setFeedbackOpenId(null);
+      setFeedbackSuccessId(message.id);
+      setTimeout(() => setFeedbackSuccessId(null), 3000);
+    } else if (nextRating === 'dislike') {
+      setFeedbackOpenId(message.id);
+      setFeedbackComment('');
+    } else {
+      setFeedbackOpenId(null);
+    }
+  };
+
+  const handleSubmitFeedback = (messageId: string) => {
+    if (onRateMessage) {
+      onRateMessage(messageId, 'dislike', feedbackComment);
+    }
+    setFeedbackOpenId(null);
+    setFeedbackSuccessId(messageId);
+    setFeedbackComment('');
+    setTimeout(() => setFeedbackSuccessId(null), 3500);
   };
 
   const samplePrompts = [
@@ -252,6 +293,38 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             <span className="text-[11px]">নোটে সেভ</span>
                           </button>
                         )}
+
+                        {/* Thumbs Up (Like) Button */}
+                        <button
+                          onClick={() => handleRatingClick(message, 'like')}
+                          className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                            message.rating === 'like'
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm font-semibold'
+                              : 'hover:bg-slate-800 hover:text-emerald-400 text-slate-400'
+                          }`}
+                          title={message.rating === 'like' ? 'লাইক প্রত্যাহার করুন' : 'ভালো লেগেছে (Thumbs Up)'}
+                        >
+                          <ThumbsUp className={`w-3.5 h-3.5 ${message.rating === 'like' ? 'fill-emerald-400' : ''}`} />
+                          <span className="text-[11px] hidden sm:inline">
+                            {message.rating === 'like' ? 'পছন্দ হয়েছে' : ''}
+                          </span>
+                        </button>
+
+                        {/* Thumbs Down (Dislike) Button */}
+                        <button
+                          onClick={() => handleRatingClick(message, 'dislike')}
+                          className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                            message.rating === 'dislike'
+                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-sm font-semibold'
+                              : 'hover:bg-slate-800 hover:text-rose-400 text-slate-400'
+                          }`}
+                          title={message.rating === 'dislike' ? 'ফিডব্যাক বন্ধ করুন' : 'উন্নতির সুযোগ আছে (Thumbs Down)'}
+                        >
+                          <ThumbsDown className={`w-3.5 h-3.5 ${message.rating === 'dislike' ? 'fill-rose-400' : ''}`} />
+                          <span className="text-[11px] hidden sm:inline">
+                            {message.rating === 'dislike' ? 'ফিডব্যাক' : ''}
+                          </span>
+                        </button>
                       </div>
 
                       {/* Regenerate Button if last message */}
@@ -259,13 +332,85 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         <button
                           onClick={onRegenerate}
                           disabled={isLoading}
-                          className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-800 hover:text-slate-200 transition-colors disabled:opacity-50"
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-800 hover:text-slate-200 transition-colors disabled:opacity-50 cursor-pointer"
                           title="পুনরায় উত্তর তৈরি করুন"
                         >
                           <RotateCw className="w-3.5 h-3.5" />
                           <span className="text-[11px]">পুনরায় তৈরি</span>
                         </button>
                       )}
+                    </div>
+                  )}
+
+                  {/* Feedback Success Notification */}
+                  {!isUser && feedbackSuccessId === message.id && (
+                    <div className="mt-2 py-1.5 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] flex items-center gap-1.5 animate-in fade-in duration-200">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>মতামতের জন্য ধন্যবাদ! এটি মডেলের মানোন্নয়নে সংরক্ষিত হয়েছে। (জাযাকাল্লাহু খাইরান)</span>
+                    </div>
+                  )}
+
+                  {/* Expandable Feedback Box for Thumbs Down */}
+                  {!isUser && feedbackOpenId === message.id && (
+                    <div className="mt-2.5 p-3 rounded-xl bg-slate-900 border border-slate-700/80 shadow-lg animate-in fade-in slide-in-from-top-1 duration-150 text-xs">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-slate-200 flex items-center gap-1.5">
+                          <MessageSquare className="w-3.5 h-3.5 text-rose-400" />
+                          কী সমস্যা ছিল? (মডেল কোয়ালিটি ফিডব্যাক)
+                        </span>
+                        <button
+                          onClick={() => setFeedbackOpenId(null)}
+                          className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Quick feedback tags */}
+                      <div className="flex flex-wrap gap-1.5 mb-2.5">
+                        {[
+                          'ভুল তথ্য',
+                          'অপ্রাসঙ্গিক উত্তর',
+                          'অসম্পূর্ণ আলোচনা',
+                          'কঠিন বা অস্পষ্ট ভাষা',
+                          'ইসলামিক আদবে ঘাটতি',
+                          'ধীরগতি',
+                        ].map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => {
+                              setFeedbackComment((prev) => (prev ? `${prev}, ${tag}` : tag));
+                            }}
+                            className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 border border-slate-700/60 transition-colors cursor-pointer"
+                          >
+                            + {tag}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={feedbackComment}
+                          onChange={(e) => setFeedbackComment(e.target.value)}
+                          placeholder="নির্দিষ্ট কারণ লিখুন (ঐচ্ছিক)..."
+                          className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-rose-500/60"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSubmitFeedback(message.id);
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => handleSubmitFeedback(message.id)}
+                          className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                        >
+                          <Send className="w-3 h-3" />
+                          <span>জমা দিন</span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

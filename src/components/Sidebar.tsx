@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Chat } from '../types.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 import { ThemeToggle } from './ThemeToggle.tsx';
@@ -17,7 +17,9 @@ import {
   LogIn,
   RefreshCw,
   Clock,
-  BookOpen
+  BookOpen,
+  Keyboard,
+  Pin
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -28,7 +30,9 @@ interface SidebarProps {
   onDeleteChat: (chatId: string) => void;
   onClearAllChats?: () => void;
   onRenameChat: (chatId: string, newTitle: string) => void;
+  onTogglePinChat?: (chatId: string) => void;
   onOpenNotes: () => void;
+  onOpenShortcuts?: () => void;
   isDark: boolean;
   onToggleTheme: () => void;
   onOpenProfile: () => void;
@@ -44,7 +48,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNewChat,
   onDeleteChat,
   onRenameChat,
+  onTogglePinChat,
   onOpenNotes,
+  onOpenShortcuts,
   isDark,
   onToggleTheme,
   onOpenProfile,
@@ -56,14 +62,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const isMac = typeof window !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const metaKey = isMac ? '⌘' : 'Ctrl';
+
+  // Listen for Ctrl+F / Cmd+F to focus search input
+  useEffect(() => {
+    const handleSearchKey = (e: KeyboardEvent) => {
+      const isModifier = isMac ? e.metaKey : e.ctrlKey;
+      if (isModifier && e.key.toLowerCase() === 'f' && !e.shiftKey) {
+        e.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          searchInputRef.current.select();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleSearchKey);
+    return () => window.removeEventListener('keydown', handleSearchKey);
+  }, [isMac]);
 
   // Filter chats by search query
   const filteredChats = chats.filter((c) =>
     c.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Group chats by date
+  // Group chats by pinned status & date
   const now = new Date();
+  const pinnedChats: Chat[] = [];
   const todayChats: Chat[] = [];
   const yesterdayChats: Chat[] = [];
   const pastWeekChats: Chat[] = [];
@@ -72,6 +99,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const oneDay = 24 * 60 * 60 * 1000;
 
   filteredChats.forEach((chat) => {
+    // If pinned, keep at top in dedicated pinned section
+    if (chat.isPinned) {
+      pinnedChats.push(chat);
+      return;
+    }
+
     const chatDate = new Date(chat.updatedAt || chat.createdAt);
     const diffDays = Math.floor((now.getTime() - chatDate.getTime()) / oneDay);
 
@@ -146,6 +179,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
+        {/* Search Bar at Top of Sidebar */}
+        <div className="p-3 pb-2 border-b border-slate-800/80 bg-slate-950/20">
+          <div className="relative group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-400 transition-colors pointer-events-none" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="কথোপকথন খুঁজুন (Ctrl+F)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-9 py-2 text-xs rounded-xl bg-slate-950/80 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  searchInputRef.current?.focus();
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white rounded-md hover:bg-slate-800 transition-colors cursor-pointer"
+                title="সার্চ মুছুন"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <kbd className="hidden sm:inline absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 pointer-events-none">
+                {metaKey}+F
+              </kbd>
+            )}
+          </div>
+        </div>
+
         {/* New Chat & Notes Buttons */}
         <div className="p-3 space-y-2">
           <button
@@ -153,10 +218,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onNewChat();
               if (window.innerWidth < 1024) onToggleOpen();
             }}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 shadow-md shadow-indigo-600/20 border border-indigo-500/30 transition-all cursor-pointer"
+            className="w-full flex items-center justify-between py-2.5 px-3.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 shadow-md shadow-indigo-600/20 border border-indigo-500/30 transition-all cursor-pointer"
+            title={`নতুন চ্যাট (${metaKey}+K)`}
           >
-            <Plus className="w-4 h-4" />
-            <span>নতুন চ্যাট শুরু করুন</span>
+            <div className="flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              <span>নতুন চ্যাট শুরু করুন</span>
+            </div>
+            <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-900/80 text-indigo-200 border border-indigo-700/50 font-mono">
+              {metaKey}+K
+            </kbd>
           </button>
 
           <button
@@ -164,33 +235,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onOpenNotes();
               if (window.innerWidth < 1024) onToggleOpen();
             }}
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all cursor-pointer"
+            className="w-full flex items-center justify-between py-2 px-3 rounded-xl text-xs font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all cursor-pointer"
+            title={`নোটবুক (${metaKey}+Shift+N)`}
           >
-            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-            <span>নোটবুক (My Notes)</span>
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+              <span>নোটবুক (My Notes)</span>
+            </div>
+            <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/40 font-mono">
+              {metaKey}+Shift+N
+            </kbd>
           </button>
-        </div>
-
-        {/* Search Input */}
-        <div className="px-3 pb-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="কথোপকথন খুঁজুন..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg bg-slate-950/60 dark:bg-slate-900 border border-slate-800 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-colors"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
         </div>
 
         {/* Chat List Groupings */}
@@ -201,8 +256,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <p>কোনো পূর্ববর্তী চ্যাট নেই।</p>
               <p className="mt-1 text-slate-600">উপরে 'নতুন চ্যাট' এ ক্লিক করে যেকোনো প্রশ্ন জিজ্ঞেস করুন।</p>
             </div>
+          ) : searchQuery.trim() && filteredChats.length === 0 ? (
+            <div className="p-6 text-center text-slate-500 text-xs animate-in fade-in duration-150">
+              <Search className="w-8 h-8 mx-auto mb-2 opacity-40 text-slate-400" />
+              <p className="font-semibold text-slate-300">কোনো ফলাফল পাওয়া যায়নি</p>
+              <p className="mt-1 text-slate-400 text-[11px] truncate">
+                "{searchQuery}" এর সাথে মিলে এমন কোনো চ্যাট নেই।
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  searchInputRef.current?.focus();
+                }}
+                className="mt-3 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs font-medium border border-indigo-500/30 transition-colors cursor-pointer"
+              >
+                অনুসন্ধান মুছুন
+              </button>
+            </div>
           ) : (
             <>
+              {searchQuery.trim() && (
+                <div className="px-2 pb-2 text-[11px] font-medium text-slate-400 flex items-center justify-between border-b border-slate-800/60 mb-2">
+                  <span className="flex items-center gap-1.5 text-indigo-300">
+                    <Search className="w-3 h-3 text-indigo-400" />
+                    <span>ফলাফল: {filteredChats.length}টি চ্যাট</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 cursor-pointer"
+                  >
+                    সব দেখুন
+                  </button>
+                </div>
+              )}
+
+              {/* Pinned Chats Section */}
+              {pinnedChats.length > 0 && (
+                <div className="pb-1">
+                  <div className="px-2 pb-1 text-[11px] font-semibold text-amber-400 uppercase tracking-wider flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Pin className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                      <span>পিন করা কথোপকথন ({pinnedChats.length})</span>
+                    </span>
+                  </div>
+                  <div className="space-y-1">{pinnedChats.map((c) => renderChatItem(c))}</div>
+                </div>
+              )}
+
               {todayChats.length > 0 && (
                 <div>
                   <div className="px-2 pb-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -246,6 +348,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* User Card & Auth Section at Bottom */}
         <div className="p-3 border-t border-slate-800 bg-slate-950/40">
+          {/* Keyboard Shortcuts Trigger Button */}
+          {onOpenShortcuts && (
+            <button
+              onClick={() => {
+                onOpenShortcuts();
+                if (window.innerWidth < 1024) onToggleOpen();
+              }}
+              className="w-full mb-2 flex items-center justify-between py-1.5 px-3 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-slate-800/60 hover:border-slate-700 transition-all cursor-pointer"
+              title="কীবোর্ড শর্টকাট সহায়িকা"
+            >
+              <div className="flex items-center gap-2">
+                <Keyboard className="w-3.5 h-3.5 text-indigo-400" />
+                <span>শর্টকাট সহায়িকা</span>
+              </div>
+              <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-mono">
+                {metaKey}+/
+              </kbd>
+            </button>
+          )}
+
           {user ? (
             <div
               onClick={onOpenProfile}
@@ -340,17 +462,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
         }`}
       >
-        <div className="flex items-center gap-2.5 min-w-0 pr-2">
-          <MessageSquare
-            className={`w-3.5 h-3.5 shrink-0 ${
-              isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
-            }`}
-          />
+        <div className="flex items-center gap-2 min-w-0 pr-2">
+          {chat.isPinned ? (
+            <Pin className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
+          ) : (
+            <MessageSquare
+              className={`w-3.5 h-3.5 shrink-0 ${
+                isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
+              }`}
+            />
+          )}
           <span className="truncate">{chat.title}</span>
         </div>
 
         {/* Action buttons (always visible on touch / visible on hover on desktop) */}
         <div className="flex items-center gap-1 shrink-0 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+          {onTogglePinChat && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onTogglePinChat(chat.id);
+              }}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                chat.isPinned
+                  ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'
+                  : 'text-slate-400 hover:text-amber-400 hover:bg-slate-700/80'
+              }`}
+              title={chat.isPinned ? 'আনপিন করুন' : 'শীর্ষে পিন করে রাখুন'}
+            >
+              <Pin className={`w-3.5 h-3.5 ${chat.isPinned ? 'fill-amber-400' : ''}`} />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={(e) => handleStartRename(chat, e)}

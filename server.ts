@@ -50,6 +50,8 @@ interface Message {
   content: string;
   timestamp: string;
   citations?: string[];
+  rating?: 'like' | 'dislike' | null;
+  feedbackComment?: string;
 }
 
 interface Chat {
@@ -58,6 +60,7 @@ interface Chat {
   title: string;
   createdAt: string;
   updatedAt: string;
+  isPinned?: boolean;
 }
 
 interface Note {
@@ -438,6 +441,28 @@ app.put('/api/chats/:chatId/title', authMiddleware, (req, res) => {
   return res.json(chat);
 });
 
+// Pin / Unpin chat
+app.put('/api/chats/:chatId/pin', authMiddleware, (req, res) => {
+  const user = (req as any).user as User;
+  const { chatId } = req.params;
+  const { isPinned } = req.body;
+
+  const chat = db.chats.find((c) => c.id === chatId && c.userId === user.id);
+  if (!chat) {
+    return res.status(404).json({ error: 'কথোপকথন পাওয়া যায়নি।' });
+  }
+
+  chat.isPinned = typeof isPinned === 'boolean' ? isPinned : !chat.isPinned;
+  chat.updatedAt = new Date().toISOString();
+  saveDb();
+
+  return res.json({
+    success: true,
+    chat,
+    message: chat.isPinned ? 'চ্যাটটি শীর্ষে পিন করা হয়েছে।' : 'চ্যাটটি আনপিন করা হয়েছে।',
+  });
+});
+
 // Delete chat
 app.delete('/api/chats/:chatId', authMiddleware, (req, res) => {
   const user = (req as any).user as User;
@@ -448,6 +473,38 @@ app.delete('/api/chats/:chatId', authMiddleware, (req, res) => {
   saveDb();
 
   return res.json({ success: true, chatId, message: 'চ্যাট সফলভাবে মুছে ফেলা হয়েছে।' });
+});
+
+// Submit thumbs up / thumbs down rating & feedback for an assistant message
+app.post('/api/messages/:messageId/feedback', optionalAuthMiddleware, (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { rating, feedback } = req.body;
+
+    if (rating !== 'like' && rating !== 'dislike' && rating !== null) {
+      return res.status(400).json({ error: 'রেটিং অবশ্যই like, dislike বা null হতে হবে।' });
+    }
+
+    const message = db.messages.find((m) => m.id === messageId);
+    if (message) {
+      message.rating = rating;
+      if (feedback !== undefined) {
+        message.feedbackComment = typeof feedback === 'string' ? feedback.trim() : '';
+      }
+      saveDb();
+    }
+
+    return res.json({
+      success: true,
+      messageId,
+      rating,
+      feedback: feedback || null,
+      message: 'আপনার মূল্যবান মতামত গ্রহণ করা হয়েছে। জাযাকাল্লাহু খাইরান!',
+    });
+  } catch (err: any) {
+    console.error('Error recording message feedback:', err);
+    return res.status(500).json({ error: 'মতামত সংরক্ষণ করতে ব্যর্থ হয়েছে।' });
+  }
 });
 
 // Delete all chats
