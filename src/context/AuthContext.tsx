@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserStats } from '../types.ts';
+import { signInWithGoogle } from '../firebase.ts';
 
 interface AuthContextType {
   user: User | null;
@@ -8,6 +9,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   updateProfile: (data: { name?: string; bio?: string; avatar?: string }) => Promise<{ success: boolean; error?: string }>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -114,6 +116,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const loginWithGoogle = async () => {
+    try {
+      const gRes = await signInWithGoogle();
+      if (gRes.error || !gRes.user) {
+        return { success: false, error: gRes.error || 'গুগল সাইন-ইন সম্পন্ন হয়নি।' };
+      }
+
+      const gUser = gRes.user;
+      const email = gUser.email || `${gUser.uid}@gmail.com`;
+      const name = gUser.displayName || 'সম্মানিত ব্যবহারকারী';
+      const password = `google_auth_${gUser.uid.slice(0, 16)}`;
+
+      // Try login first
+      let res = await login(email, password);
+      if (!res.success) {
+        // Register if new user
+        res = await register(name, email, password);
+        if (res.success && gUser.photoURL) {
+          // Sync photo
+          await updateProfile({ avatar: gUser.photoURL });
+        }
+      }
+
+      return res;
+    } catch (err: any) {
+      console.error('loginWithGoogle failed:', err);
+      return { success: false, error: 'গুগল সাইন-ইন করতে ব্যর্থ হয়েছে।' };
+    }
+  };
+
   const updateProfile = async (data: { name?: string; bio?: string; avatar?: string }) => {
     if (!token) return { success: false, error: 'অনুগ্রহ করে লগইন করুন।' };
 
@@ -198,6 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         login,
         register,
+        loginWithGoogle,
         updateProfile,
         changePassword,
         logout,
